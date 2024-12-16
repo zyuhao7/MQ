@@ -23,9 +23,9 @@ namespace mq
         }                                                                                                \
     }
 
-#define LOG_DEBUG(format, ...) LOG("DEBUG", DBG_LEVEL, format, DBG_LEVEL);
-#define LOG_INFO(format, ...) LOG("INFO", INF_LEVEL, format, INF_LEVEL);
-#define LOG_ERROR(format, ...) LOG("ERROR", ERR_LEVEL, format, ERR_LEVEL);
+#define LOG_DEBUG(format, ...) LOG("DEBUG", DBG_LEVEL, format, ##__VA_ARGS__);
+#define LOG_INFO(format, ...) LOG("INFO", INF_LEVEL, format, ##__VA_ARGS__);
+#define LOG_ERROR(format, ...) LOG("ERROR", ERR_LEVEL, format, ##__VA_ARGS__);
 }
 
 #endif
