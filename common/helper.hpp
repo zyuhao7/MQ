@@ -81,6 +81,7 @@ namespace mq
             return res.size();
         }
     };
+
     class UUIDHelper
     {
     public:
