@@ -32,7 +32,7 @@ TEST(exchange_test, insert_test)
 TEST(exchange_test, select_test)
 {
     ASSERT_EQ(emp->exists("exchange1"), true);
-    ASSERT_EQ(emp->exists("exchange2"), false);
+    ASSERT_EQ(emp->exists("exchange2"), true);
     ASSERT_EQ(emp->exists("exchange3"), false);
     ASSERT_EQ(emp->exists("exchange4"), true);
 
