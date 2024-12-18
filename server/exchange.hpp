@@ -1,6 +1,6 @@
-#include <../common/logger.hpp>
-#include <../common/helper.hpp>
-#include <../common/msg.pb.h>
+#include "../common/logger.hpp"
+#include "../common/helper.hpp"
+#include "../common/msg.pb.h"
 #include <unordered_map>
 #include <iostream>
 #include <mutex>
@@ -22,6 +22,7 @@ namespace mq
         bool auto_delete;
         // 5. 其它参数
         std::unordered_map<std::string, std::string> args;
+        Exchange() {}
         Exchange(const std::string ename,
                  ExchangeType etype,
                  bool edurable,
@@ -44,7 +45,7 @@ namespace mq
                 size_t pos = str.find("=");
                 std::string key = str.substr(0, pos);
                 std::string val = str.substr(pos + 1);
-                args.insert(std::make_pair(key, val));
+                args[key] = val;
             }
         }
         // 将args的内容进行序列化后返回一个字符串.
@@ -61,6 +62,8 @@ namespace mq
         // bool parse();
     };
 
+    using ExchangeMap = std::unordered_map<std::string, Exchange::ptr>;
+
     // 2. 定义交换机数据持久化管理类, 数据存储在 sqlite 数据库中
     class ExchangeMapper
     {
@@ -70,13 +73,14 @@ namespace mq
         {
             std::string path = FileHelper::parentDirectory(dbfile);
             assert(_sql_helper.open());
+            createTable();
         }
         void createTable()
         {
 #define CREATE_TABLE "create table if not exists exchange_table(name varchar(32) primary key,\
             type int, \
             durable int, \
-             delete int, \
+             auto_delete int, \
              args varchar(128));"
             bool ret = _sql_helper.exec(CREATE_TABLE, nullptr, nullptr);
             if (ret == false)
@@ -87,8 +91,8 @@ namespace mq
         }
         void removeTable()
         {
-#define DROP_TABLE "drop table if exists exchange_table";
-            bool ret = _sql_helper.exec(CREATE_TABLE, nullptr, nullptr);
+#define DROP_TABLE "drop table if exists exchange_table;"
+            bool ret = _sql_helper.exec(DROP_TABLE, nullptr, nullptr);
             if (ret == false)
             {
                 LOG_DEBUG("删除交换机数据库失败!");
@@ -115,11 +119,11 @@ namespace mq
         {
             std::stringstream ss;
             ss << "delete from exchange_table where name=";
-            ss << "'" << name << "', ";
+            ss << "'" << name << "';";
             _sql_helper.exec(ss.str(), nullptr, nullptr);
+            
         }
 
-        using ExchangeMap = std::unordered_map<std::string, Exchange::ptr>;
         ExchangeMap recovery()
         {
             ExchangeMap result;
@@ -152,6 +156,7 @@ namespace mq
     class ExchangeManager
     {
     public:
+        using ptr = std::shared_ptr<ExchangeManager>;
         ExchangeManager(const std::string &dbfile)
             : _mapper(dbfile)
         {
@@ -216,12 +221,20 @@ namespace mq
             }
             return true;
         }
+
+        size_t size()
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            return _exchanges.size();
+        }
+
         // 清理所有交换机
         bool clear() // test
         {
             std::unique_lock<std::mutex> lock(_mutex);
             _mapper.removeTable();
             _exchanges.clear();
+            return true;
         }
 
     private:
