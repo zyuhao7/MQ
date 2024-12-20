@@ -72,6 +72,7 @@ namespace mq
             : _sql_helper(dbfile)
         {
             std::string path = FileHelper::parentDirectory(dbfile);
+            FileHelper::createDirectory(path);
             assert(_sql_helper.open());
             createTable();
         }
@@ -99,7 +100,7 @@ namespace mq
                 exit(EXIT_FAILURE);
             }
         }
-        void insert(Exchange::ptr &exp)
+        bool insert(Exchange::ptr &exp)
         {
             // #define INSERT_SQL "insert into exchange_table values('%s', %d, %d, %d, '%s')"
             // char sql_str[4096] = {0};
@@ -113,7 +114,7 @@ namespace mq
             ss << exp->auto_delete << ", ";
             ss << "'" << exp->getArgs() << "');";
 
-            _sql_helper.exec(ss.str(), nullptr, nullptr);
+            return _sql_helper.exec(ss.str(), nullptr, nullptr);
         }
         void remove(const std::string &name)
         {
