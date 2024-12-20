@@ -107,8 +107,10 @@ namespace mq
         using QueueMap = std::unordered_map<std::string, MsgQueue::ptr>;
         QueueMap recovery()
         {
+            QueueMap result;
             std::string sql = "select name, durable, exclusive, auto_delete, args from queue_table";
-            _sql_helper.exec(sql, selectCallBack, nullptr);
+            _sql_helper.exec(sql, selectCallBack, &result);
+            return result;
         }
 
     private:
@@ -134,6 +136,7 @@ namespace mq
     class MsgQueueManager
     {
     public:
+        using ptr = std::shared_ptr<MsgQueueManager>;
         MsgQueueManager(const std::string &dbfile)
             : _mapper(dbfile)
         {
@@ -146,7 +149,6 @@ namespace mq
             auto it = _msg_queues.find(qname);
             if (it != _msg_queues.end())
             {
-                LOG_ERROR("队列已经存在!");
                 return true;
             }
             auto queue = std::make_shared<MsgQueue>(qname, qdurable, qexclusive, qauto_delete, qargs);
@@ -157,8 +159,7 @@ namespace mq
                     return false;
             }
             _msg_queues.insert(std::make_pair(qname, queue));
-            _mapper.insert(queue);
-            retrun true;
+            return true;
         }
 
         void deleteQueue(const std::string &qname)
@@ -167,7 +168,6 @@ namespace mq
             QueueMap::iterator it = _msg_queues.find(qname);
             if (it == _msg_queues.end())
             {
-                LOG_ERROR("队列不存在!");
                 return;
             }
             if (it->second->durable == true)
@@ -181,7 +181,6 @@ namespace mq
             auto it = _msg_queues.find(qname);
             if (it == _msg_queues.end())
             {
-                LOG_ERROR("队列不存在!");
                 return MsgQueue::ptr();
             }
             return it->second;
