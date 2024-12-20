@@ -164,7 +164,7 @@ namespace mq
             _exchanges = _mapper.recovery();
         }
         // 声明交换机
-        void declareExchange(const std::string &name, ExchangeType type,
+        bool declareExchange(const std::string &name, ExchangeType type,
                              bool durable, bool auto_delete, std::unordered_map<std::string, std::string> &args)
 
         {
@@ -173,14 +173,19 @@ namespace mq
             if (it != _exchanges.end())
             {
                 // 交换机存在
-                return;
+                return true;
             }
             auto exp = std::make_shared<Exchange>(name, type, durable, auto_delete, args);
             {
                 if (durable == true)
-                    _mapper.insert(exp);
+                {
+                    bool ret = _mapper.insert(exp);
+                    if (ret == false)
+                        return false;
+                }
             }
             _exchanges.insert(std::make_pair(name, exp));
+            return true;
         }
         // 删除交换机
         void deleteExchange(const std::string &name)
@@ -241,6 +246,6 @@ namespace mq
     private:
         std::mutex _mutex;
         ExchangeMapper _mapper;
-        std::unordered_map<std::string, Exchange::ptr> _exchanges;
+        ExchangeMap _exchanges;
     };
 };
