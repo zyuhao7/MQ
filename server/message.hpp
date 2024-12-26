@@ -25,6 +25,7 @@ namespace mq
             _datafile = basedir + qname + DATAFILE_SUBFIX;
             _tmpfile = basedir + qname + TMPFILE_SUBFIX;
             assert(FileHelper::createDirectory(basedir));
+            createMsgFile();
         }
         bool createMsgFile()
         {
@@ -76,7 +77,7 @@ namespace mq
                 LOG_DEBUG("加载队列数据文件失败!");
                 return res;
             }
-            
+
             for (auto &msg : res)
             {
                 ret = insert(_tmpfile, msg);
@@ -152,5 +153,152 @@ namespace mq
         std::string _qname;
         std::string _datafile;
         std::string _tmpfile;
+    };
+    class QueueMessage
+    {
+    public:
+        QueueMessage(std::string &basedir, const std::string &qname)
+            : _qname(qname), _mapper(basedir, qname)
+        {
+            _valid_count = 0;
+            _total_count = 0;
+        }
+
+        bool insert(const BasicProperties *bp, const std::string &body, DeliverMode delivery_mode)
+        {
+            // 1. 构造消息对象
+            MessagePtr msg = std::make_shared<Message>();
+            msg->mutable_payload()->set_body(body);
+            if (bp != nullptr)
+            {
+                msg->mutable_payload()->mutable_properties()->CopyFrom(*bp);
+            }
+            else
+            {
+                msg->mutable_payload()->mutable_properties()->set_id(UUIDHelper::uuid());
+                msg->mutable_payload()->mutable_properties()->set_delivery_mode(delivery_mode);
+                msg->mutable_payload()->mutable_properties()->set_routing_key("");
+            }
+            // 2. 判断是否需要持久化
+            std::unique_lock<std::mutex> lock(_mutex);
+            if (msg->payload().properties().delivery_mode() == DeliverMode::DURABLE)
+            {
+                msg->mutable_payload()->set_valid("1"); // 在持久化存储中表示数据有效
+
+                // 3. 进行持久化存储
+                bool ret = _mapper.insert(msg);
+                if (ret == false)
+                {
+                    LOG_DEBUG(" %s 消息持久化存储失败!", body.c_str());
+                    return false;
+                }
+                _valid_count++;
+                _total_count++;
+                _durable_msgs.insert(std::make_pair(msg->payload().properties().id(), msg));
+            }
+            //  4. 内存的管理
+            _msgs.push_back(msg);
+            return true;
+        }
+        MessagePtr front()
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            MessagePtr msg = _msgs.front();
+            _msgs.pop_front();
+            _waitack_msgs.insert(std::make_pair(msg->payload().properties().id(), msg));
+            return msg;
+        }
+
+        bool remove(const std::string &msg_id) // 每次删除消息后判断是否需要垃圾回收
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            auto it = _waitack_msgs.find(msg_id);
+            if (it == _waitack_msgs.end())
+            {
+                LOG_DEBUG("消息 %s 不存在!", msg_id.c_str());
+                return false;
+            }
+            if (it->second->payload().properties().delivery_mode() == DeliverMode::DURABLE)
+            {
+                _mapper.remove(it->second);
+                _durable_msgs.erase(msg_id);
+                _valid_count--;
+                gc(); // 垃圾回收
+            }
+            _waitack_msgs.erase(msg_id);
+        }
+        size_t getable_count() // 可推送
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            return _msgs.size();
+        }
+        size_t total_count()
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            return _total_count;
+        }
+        size_t durable_count()
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            return _durable_msgs.size();
+        }
+        size_t waitack_count()
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            return _waitack_msgs.size();
+        }
+        void clear()
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            _mapper.removeMsgFile();
+            _msgs.clear();
+            _durable_msgs.clear();
+            _waitack_msgs.clear();
+            _valid_count = 0;
+            _total_count = 0;
+        }
+
+    private:
+        bool GCCheck()
+        {
+            // 持久化的消息总量大于 2000, 且有效比例低于 50%  则需要持久化
+            if (_durable_msgs.size() > 2000 && _valid_count * 100 / _durable_msgs.size() < 50)
+            {
+                return true;
+            }
+            return false;
+        }
+        void gc()
+        {
+            if (!GCCheck())
+                return;
+            auto msgs = _mapper.gc();
+            for (auto &msg : msgs)
+            {
+                auto it = _durable_msgs.find(msg->payload().properties().id());
+                if (it != _durable_msgs.end())
+                {
+                    LOG_DEBUG("垃圾回收后, 有一条持久化消息, 在内存中没有管理");
+                    _msgs.push_back(msg);
+                    _durable_msgs.insert(std::make_pair(msg->payload().properties().id(), msg));
+                    continue;
+                }
+                // 更新每一条消息的实际存储位置
+                it->second->set_offset(msg->offset());
+                it->second->set_length(msg->length());
+            }
+            // 更新有效消息数量
+            _valid_count = msgs.size();
+        }
+
+    private:
+        std::mutex _mutex;
+        std::string _qname;
+        size_t _valid_count;
+        size_t _total_count;
+        MessageMapper _mapper;
+        std::list<MessagePtr> _msgs;
+        std::unordered_map<std::string, MessagePtr> _durable_msgs; // 持久化消息
+        std::unordered_map<std::string, MessagePtr> _waitack_msgs; // 待确认消息
     };
 }
