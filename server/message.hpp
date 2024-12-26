@@ -157,11 +157,18 @@ namespace mq
     class QueueMessage
     {
     public:
+        using ptr = std::shared_ptr<QueueMessage>;
         QueueMessage(std::string &basedir, const std::string &qname)
-            : _qname(qname), _mapper(basedir, qname)
+            : _qname(qname), _mapper(basedir, qname) {}
+
+        bool recover()
         {
-            _valid_count = 0;
-            _total_count = 0;
+            _msgs = _mapper.gc();
+            for (auto &msg : _msgs)
+            {
+                _durable_msgs.insert(std::make_pair(msg->payload().properties().id(), msg));
+            }
+            _valid_count = _total_count = _msgs.size();
         }
 
         bool insert(const BasicProperties *bp, const std::string &body, DeliverMode delivery_mode)
@@ -300,5 +307,118 @@ namespace mq
         std::list<MessagePtr> _msgs;
         std::unordered_map<std::string, MessagePtr> _durable_msgs; // 持久化消息
         std::unordered_map<std::string, MessagePtr> _waitack_msgs; // 待确认消息
+    };
+    class MessageManager
+    {
+    public:
+        MessageManager(const std::string &basedir)
+            : _basedir(basedir) {}
+
+        void initQueueMessage(const std::string &qname)
+        {
+            QueueMessage::ptr qmp;
+            {
+                std::unique_lock<std::mutex> lock(_mutex);
+                if (_queue_msgs.find(qname) != _queue_msgs.end())
+                {
+                    LOG_DEBUG("队列 %s 已经存在!", qname.c_str());
+                    return;
+                }
+                qmp = std::make_shared<QueueMessage>(_basedir, qname);
+                _queue_msgs.insert(std::make_pair(qname, qmp));
+            }
+            qmp->recover();
+        }
+
+        void destroyQueueMessage(const std::string &qname)
+        {
+            QueueMessage::ptr qmp;
+            {
+                std::unique_lock<std::mutex> lock(_mutex);
+                auto it = _queue_msgs.find(qname);
+                if (it == _queue_msgs.end())
+                {
+                    LOG_DEBUG("队列 %s 不存在!", qname.c_str());
+                    return;
+                }
+                qmp = it->second;
+                _queue_msgs.erase(it);
+            }
+
+            qmp->clear();
+        }
+
+        bool insert(const std::string &qname, const BasicProperties *bp, const std::string &body, DeliverMode delivery_mode)
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            auto it = _queue_msgs.find(qname);
+            if (it == _queue_msgs.end())
+            {
+                LOG_DEBUG("Insert Failed, 队列 %s 不存在!", qname.c_str());
+                return false;
+            }
+            return it->second->insert(bp, body, delivery_mode);
+        }
+        MessagePtr front(const std::string &qname)
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            auto it = _queue_msgs.find(qname);
+            if (it == _queue_msgs.end())
+            {
+                LOG_DEBUG("获取队首消息失败, 队列 %s 不存在!", qname.c_str());
+                return nullptr;
+            }
+            return it->second->front();
+        }
+        void ack(const std::string &qname, const std::string &msg_id)
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            auto it = _queue_msgs.find(qname);
+            if (it == _queue_msgs.end())
+            {
+                LOG_DEBUG("确认队列%s消息%s失败, 没有找到消息管理句柄!", qname.c_str(), msg_id.c_str());
+                return;
+            }
+            it->second->remove(msg_id);
+        }
+        size_t getable_count(const std::string &qname)
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            auto it = _queue_msgs.find(qname);
+            if (it == _queue_msgs.end())
+            {
+                LOG_DEBUG("获取队列 %s 待推送消息数量失败:没有找到消息管理句柄!", qname.c_str());
+                return 0;
+            }
+            return it->second->getable_count();
+        }
+        size_t total_count(const std::string &qname)
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            auto it = _queue_msgs.find(qname);
+            if (it == _queue_msgs.end())
+            {
+                LOG_DEBUG("队列 %s 不存在!", qname.c_str());
+                return 0;
+            }
+            return it->second->total_count();
+        }
+
+        size_t waitack_count(const std::string &qname)
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            auto it = _queue_msgs.find(qname);
+            if (it == _queue_msgs.end())
+            {
+                LOG_DEBUG("队列 %s 不存在!", qname.c_str());
+                return 0;
+            }
+            return it->second->waitack_count();
+        }
+
+    private:
+        std::mutex _mutex;
+        std::string _basedir;
+        std::unordered_map<std::string, QueueMessage::ptr> _queue_msgs;
     };
 }
