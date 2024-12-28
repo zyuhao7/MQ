@@ -120,13 +120,13 @@ namespace mq
             bool ret;
             while (offset < fsize)
             {
-                ret = helper.read((char *)&msg_size, offset, 4);
+                ret = helper.read((char *)&msg_size, offset, sizeof(size_t));
                 if (ret == false)
                 {
                     LOG_DEBUG("读取消息长度失败!");
                     return false;
                 }
-                offset += 4;
+                offset += sizeof(size_t);
 
                 std::string msg_body(msg_size, '\0');
                 ret = helper.read(&msg_body[0], offset, msg_size);
@@ -153,13 +153,20 @@ namespace mq
             std::string body = msg->payload().SerializeAsString();
             FileHelper helper(filename);
             size_t fsize = helper.size();
-            bool ret = helper.write(body.c_str(), fsize, body.size());
+            size_t msg_size = body.size();
+            bool ret = helper.write((char *)&msg_size, fsize, sizeof(size_t));
+            if (ret == false)
+            {
+                LOG_DEBUG("向队列%s数据文件写入数据长度失败!", filename.c_str());
+                return false;
+            }
+            ret = helper.write(body.c_str(), fsize + sizeof(size_t), body.size());
             if (ret == false)
             {
                 LOG_DEBUG("向队列%s数据文件写入数据失败!", filename.c_str());
                 return false;
             }
-            msg->set_offset(fsize);
+            msg->set_offset(fsize + sizeof(size_t));
             msg->set_length(body.size());
             return true;
         }
