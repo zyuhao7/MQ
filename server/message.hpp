@@ -138,7 +138,8 @@ namespace mq
                 offset += msg_size;
 
                 MessagePtr msg = std::make_shared<Message>();
-                msg->ParseFromString(msg_body);
+                msg->mutable_payload()->ParseFromString(msg_body);
+                LOG_DEBUG("加载到消息: %s!", msg->payload().body().c_str());
                 if (msg->payload().valid() == "0")
                 {
                     LOG_DEBUG("加载到无效消息: %s!", msg->payload().body().c_str());
