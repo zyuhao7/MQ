@@ -311,9 +311,19 @@ namespace mq
     class MessageManager
     {
     public:
+        using ptr = std::shared_ptr<MessageManager>;
         MessageManager(const std::string &basedir)
             : _basedir(basedir) {}
-
+        void clear()
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            for (auto &it : _queue_msgs)
+            {
+                it.second->clear();
+            }
+            _queue_msgs.clear();
+        }
+        
         void initQueueMessage(const std::string &qname)
         {
             QueueMessage::ptr qmp;
