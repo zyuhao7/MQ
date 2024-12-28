@@ -24,11 +24,16 @@ namespace mq
             }
             _datafile = basedir + qname + DATAFILE_SUBFIX;
             _tmpfile = basedir + qname + TMPFILE_SUBFIX;
-            assert(FileHelper::createDirectory(basedir));
+            if (FileHelper(basedir).exists() == false)
+                assert(FileHelper::createDirectory(basedir));
             createMsgFile();
         }
         bool createMsgFile()
         {
+            if (FileHelper(_datafile).exists())
+            {
+                return true;
+            }
             bool ret = FileHelper::createFile(_datafile);
             if (ret == false)
             {
@@ -55,7 +60,7 @@ namespace mq
             if (body.size() != msg->length())
             {
                 LOG_DEBUG("消息长度不一致!");
-                return;
+                return false;
             }
             FileHelper helper(_datafile);
             size_t fsize = helper.size();
@@ -77,7 +82,8 @@ namespace mq
                 LOG_DEBUG("加载队列数据文件失败!");
                 return res;
             }
-
+            LOG_DEBUG("队列 %s 数据文件加载成功, 共有 %d 条消息", _qname.c_str(), res.size());
+            FileHelper::createFile(_tmpfile);
             for (auto &msg : res)
             {
                 ret = insert(_tmpfile, msg);
@@ -87,6 +93,8 @@ namespace mq
                     return res;
                 }
             }
+            LOG_DEBUG("队列 %s 数据文件写入临时文件成功, 临时文件大小: %ld", _qname.c_str(), FileHelper(_tmpfile).size());
+
             ret = FileHelper::removeFile(_datafile);
             if (ret == false)
             {
@@ -94,6 +102,7 @@ namespace mq
                 return res;
             }
             ret = FileHelper(_tmpfile).rename(_datafile);
+            if (ret == false)
             {
                 LOG_DEBUG("重命名临时文件失败!");
                 return res;
@@ -107,6 +116,7 @@ namespace mq
             FileHelper helper(_datafile);
             size_t fsize = helper.size();
             size_t offset = 0, msg_size;
+            LOG_DEBUG("准备加载队列数据文件 %s, 文件大小: %ld", _datafile.c_str(), fsize);
             bool ret;
             while (offset < fsize)
             {
@@ -130,7 +140,10 @@ namespace mq
                 MessagePtr msg = std::make_shared<Message>();
                 msg->ParseFromString(msg_body);
                 if (msg->payload().valid() == "0")
+                {
+                    LOG_DEBUG("加载到无效消息: %s!", msg->payload().body().c_str());
                     continue;
+                }
                 res.push_back(msg);
             }
             return true;
@@ -143,7 +156,7 @@ namespace mq
             bool ret = helper.write(body.c_str(), fsize, body.size());
             if (ret == false)
             {
-                LOG_DEBUG("向队列数据文件写入数据失败!");
+                LOG_DEBUG("向队列%s数据文件写入数据失败!", filename.c_str());
                 return false;
             }
             msg->set_offset(fsize);
@@ -169,9 +182,10 @@ namespace mq
                 _durable_msgs.insert(std::make_pair(msg->payload().properties().id(), msg));
             }
             _valid_count = _total_count = _msgs.size();
+            return true;
         }
 
-        bool insert(const BasicProperties *bp, const std::string &body, DeliverMode delivery_mode)
+        bool insert(const BasicProperties *bp, const std::string &body, DeliveryMode delivery_mode)
         {
             // 1. 构造消息对象
             MessagePtr msg = std::make_shared<Message>();
@@ -188,7 +202,7 @@ namespace mq
             }
             // 2. 判断是否需要持久化
             std::unique_lock<std::mutex> lock(_mutex);
-            if (msg->payload().properties().delivery_mode() == DeliverMode::DURABLE)
+            if (msg->payload().properties().delivery_mode() == DeliveryMode::DURABLE)
             {
                 msg->mutable_payload()->set_valid("1"); // 在持久化存储中表示数据有效
 
@@ -210,6 +224,11 @@ namespace mq
         MessagePtr front()
         {
             std::unique_lock<std::mutex> lock(_mutex);
+            if (_msgs.empty())
+            {
+                LOG_DEBUG("队列 %s 没有消息!", _qname.c_str());
+                return nullptr;
+            }
             MessagePtr msg = _msgs.front();
             _msgs.pop_front();
             _waitack_msgs.insert(std::make_pair(msg->payload().properties().id(), msg));
@@ -225,7 +244,7 @@ namespace mq
                 LOG_DEBUG("消息 %s 不存在!", msg_id.c_str());
                 return false;
             }
-            if (it->second->payload().properties().delivery_mode() == DeliverMode::DURABLE)
+            if (it->second->payload().properties().delivery_mode() == DeliveryMode::DURABLE)
             {
                 _mapper.remove(it->second);
                 _durable_msgs.erase(msg_id);
@@ -323,7 +342,7 @@ namespace mq
             }
             _queue_msgs.clear();
         }
-        
+
         void initQueueMessage(const std::string &qname)
         {
             QueueMessage::ptr qmp;
@@ -358,7 +377,7 @@ namespace mq
             qmp->clear();
         }
 
-        bool insert(const std::string &qname, const BasicProperties *bp, const std::string &body, DeliverMode delivery_mode)
+        bool insert(const std::string &qname, const BasicProperties *bp, const std::string &body, DeliveryMode delivery_mode)
         {
             std::unique_lock<std::mutex> lock(_mutex);
             auto it = _queue_msgs.find(qname);
@@ -412,6 +431,18 @@ namespace mq
                 return 0;
             }
             return it->second->total_count();
+        }
+
+        size_t durable_count(const std::string &qname)
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            auto it = _queue_msgs.find(qname);
+            if (it == _queue_msgs.end())
+            {
+                LOG_DEBUG("队列 %s 不存在!", qname.c_str());
+                return 0;
+            }
+            return it->second->durable_count();
         }
 
         size_t waitack_count(const std::string &qname)
