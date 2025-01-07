@@ -1,3 +1,5 @@
+#ifndef __MESSAGE_HPP__
+#define __MESSAGE_HPP__
 #include "../common/logger.hpp"
 #include "../common/helper.hpp"
 #include "../common/msg.pb.h"
@@ -193,19 +195,23 @@ namespace mq
             return true;
         }
 
-        bool insert(const BasicProperties *bp, const std::string &body, DeliveryMode delivery_mode)
+        bool insert(const BasicProperties *bp, const std::string &body, bool queue_durable)
         {
             // 1. 构造消息对象
             MessagePtr msg = std::make_shared<Message>();
             msg->mutable_payload()->set_body(body);
             if (bp != nullptr)
             {
-                msg->mutable_payload()->mutable_properties()->CopyFrom(*bp);
+                DeliveryMode mode = queue_durable ? bp->delivery_mode() : DeliveryMode::UNDURABLE;
+                msg->mutable_payload()->mutable_properties()->set_id(bp->id());
+                msg->mutable_payload()->mutable_properties()->set_delivery_mode(mode);
+                msg->mutable_payload()->mutable_properties()->set_routing_key(bp->routing_key());
             }
             else
             {
+                DeliveryMode mode = queue_durable ? DeliveryMode::DURABLE : DeliveryMode::UNDURABLE;
                 msg->mutable_payload()->mutable_properties()->set_id(UUIDHelper::uuid());
-                msg->mutable_payload()->mutable_properties()->set_delivery_mode(delivery_mode);
+                msg->mutable_payload()->mutable_properties()->set_delivery_mode(mode);
                 msg->mutable_payload()->mutable_properties()->set_routing_key("");
             }
             // 2. 判断是否需要持久化
@@ -260,6 +266,7 @@ namespace mq
                 gc(); // 垃圾回收
             }
             _waitack_msgs.erase(msg_id);
+            return true;
         }
         size_t getable_count() // 可推送
         {
@@ -471,3 +478,4 @@ namespace mq
         std::unordered_map<std::string, QueueMessage::ptr> _queue_msgs;
     };
 }
+#endif
