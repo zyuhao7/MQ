@@ -30,7 +30,6 @@ namespace mq
         typedef int(SqliteCallback)(void *, int, char **, char **);
         SqliteHelper(const std::string &dbfile)
             : _dbfile(dbfile), _handler(nullptr) {}
-        // ~SqliteHelper();
 
         bool open(int safe_level = SQLITE_OPEN_FULLMUTEX)
         {
@@ -80,11 +79,11 @@ namespace mq
                 }
                 if (pos == idx)
                 {
-                    idx += sep.size();
+                    idx = pos + sep.size();
                     continue;
                 }
                 res.push_back(str.substr(idx, pos - idx));
-                idx += pos - idx;
+                idx = pos + sep.size();
             }
             return res.size();
         }
@@ -205,10 +204,10 @@ namespace mq
 
         static bool createFile(const std::string &filename)
         {
-            std::ofstream ofs(filename, std::ios::binary | std::ios::out);
+            std::fstream ofs(filename, std::ios::binary | std::ios::out);
             if (ofs.is_open() == false)
             {
-                LOG_ERROR("%s 文件打开失败!", filename.c_str());
+                // LOG_ERROR("%s 文件打开失败!", filename.c_str());
                 return false;
             }
             ofs.close();
