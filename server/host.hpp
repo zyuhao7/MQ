@@ -10,6 +10,7 @@ namespace mq
     class VirtualHost
     {
     public:
+        using ptr = std::shared_ptr<VirtualHost>;
         VirtualHost(const std::string &hname, const std::string &basedir, const std::string &dbfile)
             : _host_name(hname),
               _emp(std::make_shared<ExchangeManager>(dbfile)),
@@ -37,6 +38,12 @@ namespace mq
             _bmp->removeExchangeBindings(name);
             _emp->deleteExchange(name);
         }
+
+        bool existsExchange(const std::string &name)
+        {
+            return _emp->exists(name);
+        }
+
         bool declareQueue(const std::string &qname, bool qdurable, bool qexclusive, bool qauto_delete, std::unordered_map<std::string, std::string> &qargs)
         {
             // 初始化队列的消息句柄
@@ -50,6 +57,12 @@ namespace mq
             _bmp->removeMsgQueueBindings(qname);
             _mqmp->deleteQueue(qname);
         }
+
+        bool existsQueue(const std::string &qname)
+        {
+            return _mqmp->exists(qname);
+        }
+
         bool bind(const std::string &ename, const std::string &qname, const std::string &binding_key)
         {
             Exchange::ptr exp = _emp->selectExchange(ename); // 获取交换机对象
@@ -75,15 +88,20 @@ namespace mq
             return _bmp->getExchangeBindings(ename);
         }
 
-        bool basicPublish(const std::string &ename, const BasicProperties *bp, const std::string &body)
+        bool existsBinding(const std::string &ename, const std::string &qname)
         {
-            MsgQueue::ptr mqp = _mqmp->selectQueue(ename);
+            return _bmp->exists(ename, qname);
+        }
+
+        bool basicPublish(const std::string &qname, const BasicProperties *bp, const std::string &body)
+        {
+            MsgQueue::ptr mqp = _mqmp->selectQueue(qname);
             if (mqp == nullptr)
             {
-                LOG_DEBUG("发布消息失败,队列 %s 不存在!", ename.c_str());
+                LOG_DEBUG("发布消息失败,队列 %s 不存在!", qname.c_str());
                 return false;
             }
-            return _mmp->insert(ename, bp, body, mqp->durable);
+            return _mmp->insert(qname, bp, body, mqp->durable);
         }
         MessagePtr basicConsume(const std::string &qname)
         {
@@ -92,6 +110,13 @@ namespace mq
         void basicAck(const std::string &qname, const std::string &msg_id)
         {
             return _mmp->ack(qname, msg_id);
+        }
+        void clear()
+        {
+            _emp->clear();
+            _mqmp->clear();
+            _bmp->clear();
+            _mmp->clear();
         }
 
     private:
