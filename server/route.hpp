@@ -75,7 +75,7 @@ namespace mq
             dp[0][0] = true;
 
             // 3.如果 binding_key 以 # 开始, 则将 # 对应行的第 0 列置为 true
-            for (int i = 1; i <= n_bkey; i++)
+            for (int i = 1; i <= binding_keys.size(); i++)
             {
                 if (binding_keys[i - 1] == "#")
                     dp[i][0] = true;
