@@ -78,7 +78,11 @@ namespace mq
             for (int i = 1; i <= binding_keys.size(); i++)
             {
                 if (binding_keys[i - 1] == "#")
+                {
                     dp[i][0] = true;
+                    continue;
+                }
+                break;
             }
             // 4. 使用动态规划算法, 从第 1 行开始, 从第 1 列开始, 如果 binding_key 的单词与 routing_key 的单词相等, 则将其置为 true
             for (int i = 1; i <= n_bkey; i++)
