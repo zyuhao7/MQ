@@ -41,6 +41,7 @@ namespace mq
               _codec(codec),
               _pool(pool)
         {
+
         }
 
         ~Channel()
@@ -51,7 +52,11 @@ namespace mq
             }
         }
         // 交换机的声明与删除
-        void declareExchange(const declareExchangeRequestPtr &req);
+        void declareExchange(const declareExchangeRequestPtr &req)
+        {
+            _host->declareExchange(req->exchange_name(), req->exchange_type(),
+            )
+        }
         void deleteExchange(const deleteExchangeRequestPtr &req);
 
         // 队列的声明与删除
