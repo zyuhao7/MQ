@@ -1,7 +1,10 @@
+#ifndef __QUEUE_H__
+#define __QUEUE_H__
 #include "../common/logger.hpp"
 #include "../common/helper.hpp"
 #include "../common/msg.pb.h"
 #include <unordered_map>
+#include <google/protobuf/map.h>
 #include <iostream>
 #include <mutex>
 #include <memory>
@@ -14,10 +17,10 @@ namespace mq
         bool durable;
         bool exclusive;
         bool auto_delete;
-        std::unordered_map<std::string, std::string> args;
+        google::protobuf::Map<std::string, std::string> args;
         using ptr = std::shared_ptr<MsgQueue>;
         MsgQueue() {}
-        MsgQueue(const std::string &qname, bool qdurable, bool qexclusive, bool qauto_delete, std::unordered_map<std::string, std::string> &qargs)
+        MsgQueue(const std::string &qname, bool qdurable, bool qexclusive, bool qauto_delete, const google::protobuf::Map<std::string, std::string> &qargs)
             : name(qname),
               durable(qdurable),
               exclusive(qexclusive),
@@ -143,7 +146,7 @@ namespace mq
             _msg_queues = _mapper.recovery();
         }
 
-        bool declareQueue(const std::string &qname, bool qdurable, bool qexclusive, bool qauto_delete, std::unordered_map<std::string, std::string> &qargs)
+        bool declareQueue(const std::string &qname, bool qdurable, bool qexclusive, bool qauto_delete, const google::protobuf::Map<std::string, std::string> &qargs)
         {
             std::unique_lock<std::mutex> lock(_mutex);
             auto it = _msg_queues.find(qname);
@@ -216,3 +219,4 @@ namespace mq
         std::mutex _mutex;
     };
 }
+#endif
