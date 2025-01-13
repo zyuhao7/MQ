@@ -31,6 +31,7 @@ namespace mq
     class Channel
     {
     public:
+        using ptr = std::shared_ptr<Channel>;
         Channel(const std::string &id,
                 const VirtualHost::ptr &host,
                 ConsumerManager::ptr &cmp,
@@ -210,6 +211,51 @@ namespace mq
         ConsumerManager::ptr _cmp;
         VirtualHost::ptr _host;
         threadpool::ptr _pool;
+    };
+    class ChannelManager
+    {
+    public:
+        ChannelManager()
+        {
+        }
+
+        bool openChannel(const std::string &id,
+                         const VirtualHost::ptr &host,
+                         ConsumerManager::ptr &cmp,
+                         const ProtobufCodecPtr &codec,
+                         const muduo::net::TcpConnectionPtr &conn,
+                         const threadpool::ptr &pool)
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            auto it = _channels.find(id);
+            if (it != _channels.end())
+            {
+                return false;
+            }
+            auto channel = std::make_shared<Channel>(id, host, cmp, codec, conn, pool);
+            _channels.insert(std::make_pair(id, channel));
+            return true;
+        }
+        void closeChannel(const std::string &id)
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            _channels.erase(id);
+        }
+        Channel::ptr getChannel(const std::string &id)
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            auto it = _channels.find(id);
+
+            if (it == _channels.end())
+            {
+                return Channel::ptr();
+            }
+            return it->second;
+        }
+
+    private:
+        std::mutex _mutex;
+        std::unordered_map<std::string, Channel::ptr> _channels;
     };
 }
 
