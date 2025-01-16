@@ -1,5 +1,6 @@
 #ifndef __HOST_H__
 #define __HOST_H__
+#include <google/protobuf/map.h>
 #include "exchange.hpp"
 #include "message.hpp"
 #include "binding.hpp"
@@ -27,7 +28,7 @@ namespace mq
 
         bool declareExchange(const std::string &name, ExchangeType type,
                              bool durable, bool auto_delete,
-                             google::protobuf::Map<std::string, std::string> &args)
+                             const google::protobuf::Map<std::string, std::string> &args)
         {
             return _emp->declareExchange(name, type, durable, auto_delete, args);
         }
@@ -43,8 +44,11 @@ namespace mq
         {
             return _emp->exists(name);
         }
-
-        bool declareQueue(const std::string &qname, bool qdurable, bool qexclusive, bool qauto_delete, google::protobuf::Map<std::string, std::string> &qargs)
+        Exchange::ptr selectExchange(const std::string &name)
+        {
+            return _emp->selectExchange(name);
+        }
+        bool declareQueue(const std::string &qname, bool qdurable, bool qexclusive, bool qauto_delete, const google::protobuf::Map<std::string, std::string> &qargs)
         {
             // 初始化队列的消息句柄
             _mmp->initQueueMessage(qname);
@@ -61,6 +65,11 @@ namespace mq
         bool existsQueue(const std::string &qname)
         {
             return _mqmp->exists(qname);
+        }
+
+        QueueMap getAllQueues()
+        {
+            return _mqmp->getAllQueues();
         }
 
         bool bind(const std::string &ename, const std::string &qname, const std::string &binding_key)
