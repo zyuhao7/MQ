@@ -34,13 +34,15 @@ namespace mq
         using ptr = std::shared_ptr<Channel>;
         Channel(const std::string &id,
                 const VirtualHost::ptr &host,
-                ConsumerManager::ptr &cmp,
+                const ConsumerManager::ptr &cmp,
                 const ProtobufCodecPtr &codec,
                 const muduo::net::TcpConnectionPtr &conn,
                 const threadpool::ptr &pool)
             : _cid(id),
               _conn(conn),
               _codec(codec),
+              _cmp(cmp),
+              _host(host),
               _pool(pool)
         {
 
@@ -215,13 +217,14 @@ namespace mq
     class ChannelManager
     {
     public:
+        using ptr = std::shared_ptr<ChannelManager>;
         ChannelManager()
         {
         }
 
         bool openChannel(const std::string &id,
                          const VirtualHost::ptr &host,
-                         ConsumerManager::ptr &cmp,
+                         const ConsumerManager::ptr &cmp,
                          const ProtobufCodecPtr &codec,
                          const muduo::net::TcpConnectionPtr &conn,
                          const threadpool::ptr &pool)
