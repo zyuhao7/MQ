@@ -32,6 +32,31 @@ namespace mq
         }
 
         std::string cid() const { return _cid; }
+
+        bool openChannel()
+        {
+            openChannelRequest req;
+            std::string rid = UUIDHelper::uuid();
+            req.set_rid(rid);
+            req.set_cid(_cid);
+
+            _codec->send(_conn, req);
+            basicCommonResponsePtr resp = waitResponse(rid);
+            return resp->ok();
+        }
+
+        void closeChannel()
+        {
+            closeChannelRequest req;
+            std::string rid = UUIDHelper::uuid();
+            req.set_rid(rid);
+            req.set_cid(_cid);
+
+            _codec->send(_conn, req);
+            waitResponse(rid);
+            return;
+        }
+
         bool declareExchange(const std::string &name,
                              ExchangeType type,
                              bool durable,
@@ -217,7 +242,7 @@ namespace mq
             return true;
         }
 
-    private:
+    public:
         // 连接收到基础响应, 向 hash_map 中插入响应
         void putBasicResponse(const basicCommonResponsePtr &resp)
         {
