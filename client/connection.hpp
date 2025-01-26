@@ -2,7 +2,7 @@
 #define __CONNECTION_H__
 #include "muduo/proto/dispatcher.h"
 #include "muduo/proto/codec.h"
-#include "muduo/base/Logging.h"
+// #include "muduo/base/Logging.h"
 #include "muduo/base/Mutex.h"
 #include "muduo/net/EventLoop.h"
 #include "muduo/net/TcpClient.h"
@@ -16,6 +16,7 @@ namespace mq
     class Connection
     {
     public:
+        using ptr = std::shared_ptr<Connection>;
         typedef std::shared_ptr<google::protobuf::Message> MessagePtr;
 
         Connection(const std::string &sip, int sport, const AsyncWorker::ptr &worker)
