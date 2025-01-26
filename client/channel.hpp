@@ -174,7 +174,9 @@ namespace mq
             req.set_body(body);
             if (bp)
             {
-                req.mutable_properties()->CopyFrom(*bp);
+                req.mutable_properties()->set_id(bp->id());
+                req.mutable_properties()->set_delivery_mode(bp->delivery_mode());
+                req.mutable_properties()->set_routing_key(bp->routing_key());
             }
 
             _codec->send(_conn, req);
@@ -182,13 +184,18 @@ namespace mq
             return;
         }
 
-        void basicAck(const std::string &qname, const std::string &msg_id)
+        void basicAck(const std::string &msg_id)
         {
+            if (_consumer.get() == nullptr)
+            {
+                LOG_DEBUG("消息确认时, 找不到消费者信息! ");
+                return;
+            }
             std::string rid = UUIDHelper::uuid();
             basicAckRequest req;
             req.set_cid(_cid);
             req.set_rid(rid);
-            req.set_queue_name(qname);
+            req.set_queue_name(_consumer->qname);
             req.set_message_id(msg_id);
 
             _codec->send(_conn, req);
@@ -198,8 +205,9 @@ namespace mq
 
         void basicCancel()
         {
-            if (_consumer.get() != nullptr)
+            if (_consumer.get() == nullptr)
             {
+                // LOG_DEBUG("取消订阅的时候, 找不到消费者信息!");
                 return;
             }
             std::string rid = UUIDHelper::uuid();
@@ -228,8 +236,6 @@ namespace mq
             req.set_consumer_tag(ctag);
             req.set_queue_name(qname);
             req.set_auto_ack(auto_ack);
-            req.set_queue_name(qname);
-            req.set_consumer_tag(ctag);
 
             _codec->send(_conn, req);
             basicCommonResponsePtr resp = waitResponse(rid);
