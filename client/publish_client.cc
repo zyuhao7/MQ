@@ -12,7 +12,7 @@ int main()
     // 4.通过信道提供的服务完成所需
     //  1. 声明交换机Exchange1, 交换机类型为广播模式
     google::protobuf::Map<std::string, std::string> tmp_map;
-    channel->declareExchange("exchange1", mq::ExchangeType::FANOUT,
+    channel->declareExchange("exchange1", mq::ExchangeType::TOPIC,
                              true, false, tmp_map);
     //  2. 声明队列queue1
     channel->declareQueue("queue1", true, false, false, tmp_map);
@@ -25,8 +25,24 @@ int main()
     // 5. 循环向交换机发布消息
     for (int i = 0; i < 10; i++)
     {
-        channel->basicPublish("exchange1", nullptr, "hello word - " + std::to_string(i));
+        mq::BasicProperties bp;
+        bp.set_id(mq::UUIDHelper::uuid());
+        bp.set_delivery_mode(mq::DeliveryMode::DURABLE);
+        bp.set_routing_key("news.music.pop");
+
+        channel->basicPublish("exchange1", &bp, "hello word - " + std::to_string(i));
     }
+
+    mq::BasicProperties bp;
+    bp.set_id(mq::UUIDHelper::uuid());
+    bp.set_delivery_mode(mq::DeliveryMode::DURABLE);
+    bp.set_routing_key("news.music.sport");
+
+    channel->basicPublish("exchange1", &bp, "hello sport !");
+
+    bp.set_routing_key("news.cartoon");
+    channel->basicPublish("exchange1", &bp, "hello cartoon!");
+
     // 6. 关闭信道
     conn->closeChannel(channel);
     return 0;
